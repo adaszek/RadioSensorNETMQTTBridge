@@ -1,5 +1,7 @@
 import paho.mqtt.client as mqtt
+from time import gmtime, strftime
 from struct import *
+
 
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, rc):
@@ -11,13 +13,13 @@ def on_connect(client, userdata, flags, rc):
 
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
-    print(msg.topic+" "+str(msg.payload))
+    print(strftime("%a, %d %b %Y %H:%M:%S")+" "+msg.topic+" "+str(msg.payload))
 
 def on_float(client, userdata, msg):
-    print(msg.topic+" "+str(format(unpack('f', msg.payload)[0], '.1f')))
+    print(strftime("%a, %d %b %Y %H:%M:%S")+" "+msg.topic+" "+str(format(unpack('f', msg.payload)[0], '.1f')))
 
 def on_uint32(client, userdata, msg):
-    print(msg.topic+" "+str(float(unpack('I', msg.payload)[0])/1000))
+    print(strftime("%a, %d %b %Y %H:%M:%S")+" "+msg.topic+" "+str(float(unpack('I', msg.payload)[0])/1000))
 
 client = mqtt.Client()
 client.on_connect = on_connect
