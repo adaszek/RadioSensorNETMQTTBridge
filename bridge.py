@@ -41,6 +41,17 @@ def on_voltage(client, userdata, msg):
     pipe.hset('sensor:' + sensor_id + ':voltage', now, str(float(format(unpack('I', msg.payload)[0]))/1000))
     pipe.execute() 
 
+def on_started(client, userdata, msg):
+    pipe = r.pipeline()
+    now = int(time.time())
+    topic = msg.topic.split('/')
+    sensor_id = topic[4]
+    sensor_location = topic[2]
+    pipe.zadd('sensors:last_start', now, sensor_id)
+    pipe.zadd('sensors:last_location', sensor_id, sensor_location)
+    pipe.sadd('sensors', sensor_id)
+    pipe.execute() 
+
 client = mqtt.Client()
 client.on_connect = on_connect
 client.on_message = on_message
@@ -48,6 +59,7 @@ client.on_message = on_message
 client.message_callback_add("r/l/+/s/+/t", on_temperature)
 client.message_callback_add("r/l/+/s/+/h", on_humidity)
 client.message_callback_add("r/l/+/s/+/v", on_voltage)
+client.message_callback_add("r/l/+/s/+/a", on_started)
 
 client.connect("192.168.1.157", 1883, 60)
 
