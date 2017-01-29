@@ -18,27 +18,30 @@ def on_message(client, userdata, msg):
     print(time.strftime("%a, %d %b %Y %H:%M:%S")+" "+msg.topic+" "+str(msg.payload))
 
 def on_temperature(client, userdata, msg):
+    sensor_id = 'sensor:{id}'.format(id=msg.topic.split('/')[4]);
+    event_id = r.incr(sensor_id + ':temperature:events')
     pipe = r.pipeline()
     now = int(time.time())
-    sensor_id = msg.topic.split('/')[4]
-    pipe.zadd('sensor:' + sensor_id + ':temperature:timestamps', 0, now)
-    pipe.hset('sensor:' + sensor_id + ':temperature', now, str(format(unpack('f', msg.payload)[0], '.1f')))
+    pipe.zadd(sensor_id + ':temperature:timestamps', event_id, now)
+    pipe.hset(sensor_id + ':temperature', now, str(format(unpack('f', msg.payload)[0], '.1f')))
     pipe.execute() 
 
 def on_humidity(client, userdata, msg):
+    sensor_id = 'sensor:{id}'.format(id=msg.topic.split('/')[4]);
+    event_id = r.incr(sensor_id + ':humidity:events')
     pipe = r.pipeline()
     now = int(time.time())
-    sensor_id = msg.topic.split('/')[4]
-    pipe.zadd('sensor:' + sensor_id + ':humidity:timestamps', 0, now)
-    pipe.hset('sensor:' + sensor_id + ':humidity', now, str(format(unpack('f', msg.payload)[0], '.1f')))
+    pipe.zadd(sensor_id + ':humidity:timestamps', event_id, now)
+    pipe.hset(sensor_id + ':humidity', now, str(format(unpack('f', msg.payload)[0], '.1f')))
     pipe.execute() 
 
 def on_voltage(client, userdata, msg):
+    sensor_id = 'sensor:{id}'.format(id=msg.topic.split('/')[4]);
+    event_id = r.incr(sensor_id + ':voltage:events')
     pipe = r.pipeline()
     now = int(time.time())
-    sensor_id = msg.topic.split('/')[4]
-    pipe.zadd('sensor:' + sensor_id + ':voltage:timestamps', 0, now)
-    pipe.hset('sensor:' + sensor_id + ':voltage', now, str(float(format(unpack('I', msg.payload)[0]))/1000))
+    pipe.zadd(sensor_id + ':voltage:timestamps', event_id, now)
+    pipe.hset(sensor_id + ':voltage', now, str(float(format(unpack('I', msg.payload)[0]))/1000))
     pipe.execute() 
 
 def on_started(client, userdata, msg):
@@ -48,7 +51,7 @@ def on_started(client, userdata, msg):
     sensor_id = topic[4]
     sensor_location = topic[2]
     pipe.zadd('sensors:last_start', now, sensor_id)
-    pipe.zadd('sensors:last_location', sensor_id, sensor_location)
+    pipe.hset('sensors:last_location', sensor_id, sensor_location)
     pipe.sadd('sensors', sensor_id)
     pipe.execute() 
 
