@@ -52,6 +52,7 @@ def on_started(client, userdata, msg):
     sensor_location = topic[2]
     pipe.zadd('sensors:last_start', now, sensor_id)
     pipe.hset('sensors:last_location', sensor_id, sensor_location)
+    pipe.hset('sensors:functions', sensor_id, msg.payload)
     pipe.sadd('sensors', sensor_id)
     pipe.execute() 
 
