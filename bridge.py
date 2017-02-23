@@ -21,6 +21,7 @@ def on_temperature(client, userdata, msg):
     sensor_id = 'sensor:{id}'.format(id=msg.topic.split('/')[4]);
     now = int(time.time())
     pipe = r.pipeline()
+    # TODO: incr is done outside transaction
     event_id = r.incr(sensor_id + ':temperature:events')
     pipe.zadd(sensor_id + ':temperature:timestamps', event_id, now)
     pipe.hset(sensor_id + ':temperature', now, str(format(unpack('f', msg.payload)[0], '.1f')))
