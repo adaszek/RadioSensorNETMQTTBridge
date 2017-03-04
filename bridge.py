@@ -57,6 +57,7 @@ def on_started(client, userdata, msg):
     pipe.hset('sensors:functions', raw_sensor_id, msg.payload)
     pipe.sadd('sensors', raw_sensor_id)
     pipe.execute() 
+    print "started"
 
 client = mqtt.Client()
 client.on_connect = on_connect
