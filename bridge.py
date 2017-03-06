@@ -2,8 +2,19 @@ import paho.mqtt.client as mqtt
 import time
 from struct import *
 import redis
+import threading
 
 r = redis.StrictRedis(host='192.168.1.158', port=6379, db=0)
+
+def status_observer(e):
+    while True:
+        pipe = r.pipeline()
+        pipe.smembers("sensors")
+        print(pipe.execute())
+        time.sleep(1)
+
+# t = threading.Thread(name="sensor_watcher", target=status_observer)
+# t.start()
 
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, rc):
@@ -57,7 +68,6 @@ def on_started(client, userdata, msg):
     pipe.hset('sensors:functions', raw_sensor_id, msg.payload)
     pipe.sadd('sensors', raw_sensor_id)
     pipe.execute() 
-    print "started"
 
 client = mqtt.Client()
 client.on_connect = on_connect
