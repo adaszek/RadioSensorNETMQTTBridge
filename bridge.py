@@ -6,16 +6,6 @@ import threading
 
 r = redis.StrictRedis(host='192.168.1.158', port=6379, db=0)
 
-def status_observer(e):
-    while True:
-        pipe = r.pipeline()
-        pipe.smembers("sensors")
-        print(pipe.execute())
-        time.sleep(1)
-
-# t = threading.Thread(name="sensor_watcher", target=status_observer)
-# t.start()
-
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, rc):
     print("Connected with result code " + str(rc))
@@ -79,9 +69,4 @@ client.message_callback_add("r/l/+/s/+/v", on_voltage)
 client.message_callback_add("r/l/+/s/+/a", on_started)
 
 client.connect("192.168.1.157", 1883, 60)
-
-# Blocking call that processes network traffic, dispatches callbacks and
-# handles reconnecting.
-# Other loop*() functions are available that give a threaded interface and a
-# manual interface.
 client.loop_forever()
