@@ -4,22 +4,23 @@ import time
 import redis
 
 class MonitorThread(threading.Thread):
-    def __init__(self, redis, sensor_id, terminate_flag, id):
+    def __init__(self, redis, sensor_id, capabilities, terminate_flag):
         super().__init__()
         self.redis = redis
         self.sensor_id = sensor_id
+        self.capabilities = capabilities
         self.terminate_flag = terminate_flag
-        self.id = id
 
     def run(self):
         while (not self.terminate_flag.is_set()):
             pipe = self.redis.pipeline()
-            print("sensor:{sid}:temperature:timestamps".format(sid=self.sensor_id))
-            pipe.zrange("sensor:{sid}:temperature:timestamps".format(sid=self.sensor_id), -1, -1)
+            for cap in self.capabilities["r"]:
+                print("sensor:{sid}:{cid}:timestamps".format(sid=self.sensor_id, cid=cap))
+                pipe.zrange("sensor:{sid}:{cid}:timestamps".format(sid=self.sensor_id, cid=cap), -1, -1)
             print(pipe.execute())
             self.terminate_flag.wait(5)
 
-        print("killed {id}".format(id=self.id));
+        print("killed {sid}".format(sid=self.sensor_id));
 
 def get_capabilities(db):
     pipe = db.pipeline()
@@ -27,6 +28,26 @@ def get_capabilities(db):
     pipe.hgetall("sensors:functions")
     pipe.hgetall("functions")
     return pipe.execute()
+
+def decode_capabilities(to_parse, sensor_list, array_of_cap):
+    ret_dict = {}
+    for it in to_parse:
+        if it in sensor_list:
+            s_ret_dict = {}
+            reads, writes, reports = to_parse[it].split(";")
+            rkey, rcaps = reads.split(":")
+            r = list(map(lambda x: array_of_cap[x] if (x in array_of_cap) else None, rcaps.split(",")))
+            s_ret_dict[rkey] = r
+            wkey, wcaps = writes.split(":")
+            w = list(map(lambda x: array_of_cap[x] if (x in array_of_cap) else None, wcaps.split(",")))
+            s_ret_dict[wkey] = w
+            pkey, prep = reports.split(":")
+            s_ret_dict[pkey] = prep
+            ret_dict[it] = s_ret_dict
+        else:
+             print("There is no such device as {}".format(k))
+    return ret_dict
+
 
 def main():
     flag = threading.Event()
@@ -37,12 +58,13 @@ def main():
 
     signal.signal(signal.SIGINT, do_exit)
     
-    r = redis.StrictRedis(host='192.168.1.158', port=6379, db=0)
+    r = redis.StrictRedis(host='192.168.1.158', port=6379, db=0, encoding="utf-8", decode_responses=True)
 
-    print(get_capabilities(r)[1][b"55"])
+    sids, caps, array_of_cap = get_capabilities(r)
+    sensors = decode_capabilities(caps, sids, array_of_cap)
 
-    for i in range(1):
-        t = MonitorThread(r, 55, flag, i)
+    for i in sensors:
+        t = MonitorThread(r, i, sensors[i], flag)
         t.start()
 
     main_thread = threading.main_thread()
@@ -53,5 +75,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
