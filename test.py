@@ -3,33 +3,38 @@ import signal
 import time
 import redis
 import math
+import functools
+import datetime
 
 from itertools import islice
 
 class MonitorThread(threading.Thread):
-    def __init__(self, redis, capabilities, terminate_flag):
+    def __init__(self, redis, capabilities, terminate_flag, measurement_period):
         super().__init__()
         self.redis = redis
-        self.sensor_ids = capabilities.keys()
+        self.sensor_ids = list(capabilities.keys())
         self.capabilities = capabilities
         self.terminate_flag = terminate_flag
+        self.measurement_period = measurement_period
 
     def run(self):
         while (not self.terminate_flag.is_set()):
-            pipe = self.redis.pipeline()
             for sensor in self.sensor_ids:
+                pipe = self.redis.pipeline()
                 for cap in self.capabilities[sensor]["r"]:
                     if cap is not None: 
-                        print("sensor:{sid}:{cid}:timestamps".format(sid=sensor, cid=cap))
                         pipe.zrange("sensor:{sid}:{cid}:timestamps".format(sid=sensor, cid=cap), -1, -1)
 
                 for cap in self.capabilities[sensor]["w"]:
                     if cap is not None: 
-                        print("sensor:{sid}:{cid}:timestamps".format(sid=sensor, cid=cap))
                         pipe.zrange("sensor:{sid}:{cid}:timestamps".format(sid=sensor, cid=cap), -1, -1)
 
-            print(pipe.execute())
-            self.terminate_flag.wait(5)
+                last_measurements = pipe.execute()
+                last_activity = int(functools.reduce(lambda x,y: x[0] if (x[0] > y[0]) else y[0], last_measurements))
+                print(datetime.datetime.now() - datetime.datetime.fromtimestamp(last_activity))
+                print("sid {sid} last activity: {act}".format(sid=sensor, act=time.ctime(last_activity)))
+
+            self.terminate_flag.wait(self.measurement_period)
 
         print("killed {sids}".format(sids=self.sensor_ids));
 
@@ -75,6 +80,7 @@ def main():
     r = redis.StrictRedis(host='192.168.1.158', port=6379, db=0, encoding="utf-8", decode_responses=True)
 
     max_number_of_threads = 8
+    measurement_period = 10
     number_of_threads = 0;
 
     sids, caps, array_of_cap = get_capabilities(r)
@@ -90,7 +96,7 @@ def main():
     print("Number of threads: {} Sensors in db: {} Sensors per thread: {}".format(number_of_threads, len(sensors), how_many_per_thread))
 
     for sensors_to_process in dict_chunks(sensors, how_many_per_thread):
-        t = MonitorThread(r, sensors_to_process, flag)
+        t = MonitorThread(r, sensors_to_process, flag, measurement_period)
         t.start()
 
     main_thread = threading.main_thread()
