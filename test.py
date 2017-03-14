@@ -38,6 +38,25 @@ class MonitorThread(threading.Thread):
 
         print("killed {sids}".format(sids=self.sensor_ids));
 
+
+class StartupDetection(threading.Thread):
+    def __init__(self, timeout=1.0, redis, terminate_flag):
+        super().__init__()
+
+        selg.__timeout = timeout
+        self.__pubsub = redis.pubsub()
+        self.__terminate_flag = terminate_flag
+        self.__pubsub.psubscribe("__keyspace@*__:sensors")
+
+    def run(self):
+        while (not self.__terminate_flag.is_set()):
+            msg = self.__pubsub.get_message(timeout=self.__timeout)
+            if msg:
+                print("Sensor list has been modified by {} operation".format(msg["data"]))
+
+        print("exiting startup detector")
+
+
 def get_capabilities(db):
     pipe = db.pipeline()
     pipe.smembers("sensors")
@@ -98,6 +117,9 @@ def main():
     for sensors_to_process in dict_chunks(sensors, how_many_per_thread):
         t = MonitorThread(r, sensors_to_process, flag, measurement_period)
         t.start()
+
+    st = StartupDetection(r, flag)
+    st.start()
 
     main_thread = threading.main_thread()
 
