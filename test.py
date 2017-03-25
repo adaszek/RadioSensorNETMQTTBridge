@@ -11,6 +11,7 @@ from itertools import islice
 class MonitorThread(threading.Thread):
     def __init__(self, redis, capabilities, terminate_flag, measurement_period):
         super().__init__()
+
         self.redis = redis
         self.sensor_ids = list(capabilities.keys())
         self.capabilities = capabilities
@@ -31,8 +32,7 @@ class MonitorThread(threading.Thread):
 
                 last_measurements = pipe.execute()
                 last_activity = int(functools.reduce(lambda x,y: x[0] if (x[0] > y[0]) else y[0], last_measurements))
-                print(datetime.datetime.now() - datetime.datetime.fromtimestamp(last_activity))
-                print("sid {sid} last activity: {act}".format(sid=sensor, act=time.ctime(last_activity)))
+                print("sid\t{sid}\tlast activity {past}\tago :: {act}".format(sid=sensor, past=(datetime.datetime.now() - datetime.datetime.fromtimestamp(last_activity)), act=time.ctime(last_activity)))
 
             self.terminate_flag.wait(self.measurement_period)
 
@@ -40,10 +40,10 @@ class MonitorThread(threading.Thread):
 
 
 class StartupDetection(threading.Thread):
-    def __init__(self, timeout=1.0, redis, terminate_flag):
+    def __init__(self,redis, terminate_flag, timeout=1.0):
         super().__init__()
 
-        selg.__timeout = timeout
+        self.__timeout = timeout
         self.__pubsub = redis.pubsub()
         self.__terminate_flag = terminate_flag
         self.__pubsub.psubscribe("__keyspace@*__:sensors")
@@ -52,7 +52,8 @@ class StartupDetection(threading.Thread):
         while (not self.__terminate_flag.is_set()):
             msg = self.__pubsub.get_message(timeout=self.__timeout)
             if msg:
-                print("Sensor list has been modified by {} operation".format(msg["data"]))
+                # TODO: if sensor added or removed, modify monitor threds
+                print("Sensor list has been modified by {} operation".format(msg))
 
         print("exiting startup detector")
 
@@ -88,44 +89,63 @@ def dict_chunks(data, size):
     for i in range(0, len(data), size):
         yield {k:data[k] for k in islice(it, size)}
 
+class MonitorThreadsManager(object):
+    def __init__(self, redis, max_number_of_threads=8, measurement_period=10):
+        self.__max_number_of_threads = max_number_of_threads
+        self.__number_of_threads = 0
+        self.__measurement_period = measurement_period
+        self.__redis = redis
+        self.__threads = []
+        self.__flag = threading.Event()
+
+    def start_monitors(self):
+        sids, caps, array_of_cap = get_capabilities(self.__redis)
+
+        if len(sids) < self.__max_number_of_threads:
+            self.__number_of_threads = len(sids)
+        else:
+            self.__number_of_threads = self.__max_number_of_threads
+
+        sensors = decode_capabilities(caps, sids, array_of_cap)
+        how_many_per_thread = math.ceil(len(sensors)/self.__number_of_threads)
+
+        print("Number of threads: {} Sensors in db: {} Sensors per thread: {}".format(self.__number_of_threads, len(sensors), how_many_per_thread))
+
+        for sensors_to_process in dict_chunks(sensors, how_many_per_thread):
+            t = MonitorThread(self.__redis, sensors_to_process, self.__flag, self.__measurement_period)
+            t.start()
+            self.__threads.append(t)
+
+    def join_monitors(self):
+        for thread in self.__threads:
+            thread.join()
+
+    def shutdown_monitors(self):
+        self.__flag.set()
+
+    def recalculate_monitor(self):
+        self.shutdown_monitors()
+        self.start_monitors()
+
 def main():
-    flag = threading.Event()
+    flag_manager = threading.Event()
+
+    r = redis.StrictRedis(host='192.168.1.158', port=6379, db=0, encoding="utf-8", decode_responses=True)
+
+    manager = MonitorThreadsManager(r)
 
     def do_exit(sig, stack):
-        flag.set()
+        manager.shutdown_monitors()
+        flag_manager.set()
         raise SystemExit("Exiting - all threads are being killed")
 
     signal.signal(signal.SIGINT, do_exit)
-    r = redis.StrictRedis(host='192.168.1.158', port=6379, db=0, encoding="utf-8", decode_responses=True)
 
-    max_number_of_threads = 8
-    measurement_period = 10
-    number_of_threads = 0;
+    manager.start_monitors();
 
-    sids, caps, array_of_cap = get_capabilities(r)
-
-    if len(sids) < max_number_of_threads:
-        number_of_threads = len(sids)
-    else:
-        number_of_threads = max_number_of_threads
-
-    sensors = decode_capabilities(caps, sids, array_of_cap)
-    how_many_per_thread = math.ceil(len(sensors)/number_of_threads)
-
-    print("Number of threads: {} Sensors in db: {} Sensors per thread: {}".format(number_of_threads, len(sensors), how_many_per_thread))
-
-    for sensors_to_process in dict_chunks(sensors, how_many_per_thread):
-        t = MonitorThread(r, sensors_to_process, flag, measurement_period)
-        t.start()
-
-    st = StartupDetection(r, flag)
+    st = StartupDetection(r, flag_manager)
     st.start()
-
-    main_thread = threading.main_thread()
-
-    for t in threading.enumerate():
-        if t is not main_thread:
-            t.join()
+    st.join()
 
 if __name__ == "__main__":
     main()
