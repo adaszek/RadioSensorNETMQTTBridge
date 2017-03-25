@@ -1,8 +1,7 @@
 import time
+import datetime
 import redis
 import math
-import functools
-import datetime
 
 from collections import defaultdict
 
