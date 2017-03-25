@@ -22,7 +22,7 @@ def decode_capabilities(to_parse, sensor_list, array_of_cap):
             s_ret_dict[pkey] = prep
             ret_dict[it] = s_ret_dict
         else:
-             print("There is no such device as {}".format(k))
+             print("There is no such device as {}".format(it))
     return ret_dict
 
 def monitor_sensors(pipe):
