@@ -69,7 +69,7 @@ def monitor_sensors(pipe):
 def main():
     r = redis.StrictRedis(host='192.168.1.158', port=6379, db=0, encoding="utf-8", decode_responses=True)
     while 1:
-        r.transaction(monitor_sensors, ["sensors", "sensors::functions", "functions"])
+        r.transaction(monitor_sensors, ["sensors", "sensors:functions", "functions"])
         time.sleep(5)
 
 if __name__ == "__main__":
