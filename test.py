@@ -29,8 +29,8 @@ def monitor_sensors(pipe):
     sensors = pipe.smembers("sensors")
     functions = pipe.hgetall("sensors:functions")
     map_functions = pipe.hgetall("functions")
-
     decoded_sensors = decode_capabilities(functions, sensors, map_functions)
+
     keys_to_monitor = defaultdict(list)
     
     for sensor in sensors:
@@ -41,10 +41,11 @@ def monitor_sensors(pipe):
             if cap is not None:
                 keys_to_monitor[sensor].append("sensor:{sid}:{cid}:timestamps".format(sid=sensor, cid=cap))
 
-    all_last_measurements = {}
+    all_last_activities = {}
 
     while 1:
         try:
+            # TODO: think how to decompose it, per sensor
             pipe.watch(keys_to_monitor.values())
             
             for sensor in sensors:
@@ -57,21 +58,20 @@ def monitor_sensors(pipe):
                 last_activity = int(functools.reduce(lambda x,y: x[0] if (x[0] > y[0]) else y[0], last_measurements))
                 print("sid\t{sid}\tlast activity {past}\tago :: {act}".format(sid=sensor, past=(datetime.datetime.now() - datetime.datetime.fromtimestamp(last_activity)), act=time.ctime(last_activity)))
                 
-                all_last_measurements[sensor] = last_activity
+                all_last_activities[sensor] = last_activity
                 
             pipe.multi()
+            pipe.hmset("sensors:last_activity", all_last_activities)
             pipe.execute()
             break;
         except WatchError:
             continue
 
-    print(all_last_measurements)
-
-
-
 def main():
     r = redis.StrictRedis(host='192.168.1.158', port=6379, db=0, encoding="utf-8", decode_responses=True)
-    r.transaction(monitor_sensors, ["sensors", "sensors::functions", "functions"])
+    while 1:
+        r.transaction(monitor_sensors, ["sensors", "sensors::functions", "functions"])
+        time.sleep(5)
 
 if __name__ == "__main__":
     main()
